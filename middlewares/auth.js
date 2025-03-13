@@ -1,35 +1,58 @@
 const { getUser } = require("../service/auth");
 
-async function restrictToLoggedInUserOnly(req, res, next) {
-    const userUid = req.cookies?.uid;
+function checkForAuthentication(req, res, next) {
+    console.log("Middleware triggered");
 
-    console.log("User UID from cookie:", userUid);
+    console.log("Headers received:", req.headers);
+    console.log("req.cookies:", req.cookies);
 
-    if (!userUid) {
-        console.log("No UID found. Redirecting to login.");
-        return res.redirect('/login');
+   
+    let token = req.cookies?.["token"];
+
+   
+    if (!token && req.headers.authorization) {
+        const authHeader = req.headers.authorization;
+        if (authHeader.startsWith("Bearer ")) {
+            token = authHeader.split(" ")[1]; 
+        }
     }
 
-    const user = getUser(userUid);
-    console.log("User data:", user);
+    console.log("Extracted token:", token);
 
-    if (!user) {
-        console.log("User not found. Redirecting to login.");
-        return res.redirect('/login');
+    
+    if (!token) {
+        console.log("No token found.");
+        return next();
     }
 
+    const user = getUser(token);
     req.user = user;
-    next();
+
+    return next();
 }
 
-async function checkAuth(req,res,next) {
-    const userUid  = req.cookies?.uid;
-    const user = getUser(userUid);
-    req.user = user;
-    next();
+
+
+function restrictTo(roles = []) {
+    return function (req, res, next) {
+        if (!req.user) {
+            console.log("No user found in request. Redirecting to login.");
+            return res.redirect("/login");
+        }
+
+        console.log("User role:", req.user.role);
+
+        if (!roles.includes(req.user.role)) {
+            console.log("Unauthorized access attempt by:", req.user.email);
+            return res.status(403).send("Unauthorized");
+        }
+
+        return next();
+    };
 }
+
 
 module.exports = {
-    restrictToLoggedInUserOnly,
-    checkAuth,
+    checkForAuthentication,
+    restrictTo
 };
